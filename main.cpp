@@ -85,7 +85,8 @@ int main(int argc, char *argv[])
 		sarg2 = sarg1;
 		sarg2.status = NP;
 		Pthread_create(periodic+i,NULL,(void*(*)(void*))arp_infection,(void*)(&sarg1));
-		//Pthread_create(non_periodic+i,NULL,(void*(*)(void*))arp_infection,(void*)(&sarg2));
+		Sem_wait(&sem);
+		Pthread_create(non_periodic+i,NULL,(void*(*)(void*))arp_infection,(void*)(&sarg2));
 		Sem_wait(&sem);
 	}
 	
@@ -95,7 +96,7 @@ int main(int argc, char *argv[])
 	for(int i=0;i<size;i++)
 	{
 		Pthread_join(periodic[i],NULL);
-		//Pthread_join(non_periodic[i],NULL);
+		Pthread_join(non_periodic[i],NULL);
 	}
 	//Pthread_join(relay,NULL);
 
