@@ -7,7 +7,7 @@ These are what I done with the code. :)
 3. Relay reqeusts and replies
 4. Do not modify CAM table of L2 switch (even in wireless environment!)
 5. Infect arp table of sender and target PERIODICALLY AND NON-PERIODICALLY (non-periodically means it sends arp infection packets only when it has to).
-6. Send Recover packets to both sender and target when program exits
+6. Send Recover packets to both sender and target when program exits (Ctrl-C will end the program I modified signal handler to implement this feature)
 7. Use threads for above operations
 
 ![mine-2021-10-13-03-11-28](https://user-images.githubusercontent.com/31784008/137011186-cbb1e5b0-3bc6-4f35-a9bc-7cacf22483c3.png)
