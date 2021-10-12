@@ -18,11 +18,25 @@
 #include "common-threads.h"
 #include "ethhdr.h"
 #include "arphdr.h"
+#include "iphdr.h"
 
 #define ETHER_HDR_LEN 14
+#define IP_HDR_LEN 20
 #define MAC_LEN 17
 #define IP_LEN 15
-#define PERIOD 11
+#define PERIOD 1
+
+using std::string;
+using std::cout;
+using std::endl;
+using std::map;
+using std::vector;
+using std::pair;
+
+typedef enum _status
+{
+    OK,NO,P,NP
+}STATUS;
 
 #pragma pack(push, 1)
 struct EthArpPacket final
@@ -32,10 +46,13 @@ struct EthArpPacket final
 };
 #pragma pack(pop)
 
-typedef enum _status
+#pragma pack(push,1)
+struct EthIpPacket final
 {
-    OK,NO,P,NP
-}STATUS;
+    EthHdr eth_;
+    IpHdr ip_;
+};
+#pragma pack(pop)
 
 #pragma pack(push, 1)
 typedef struct _rarg
@@ -51,9 +68,10 @@ typedef struct _rarg
 #pragma pack(push,1)
 typedef struct _sarg
 {
-    //arp_infection(pcap_t *handle, Mac s_mac, Ip s_ip, Ip t_ip, Mac a_mac)
     pcap_t * handle;
+    map<Ip,Mac> *table;
     Mac s_mac;
+    Mac t_mac;
     Ip s_ip;
     Ip t_ip;
     Mac a_mac;
@@ -61,19 +79,15 @@ typedef struct _sarg
 }Spoof_arg;
 #pragma pack(pop)
 
-typedef struct _ryarg
+typedef struct _rcarg
 {
     pcap_t* handle;
     EthArpPacket p;
-}Relay_arg;
+}Recover_arg;
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
+
 sem_t sem;
+sem_t pp;
 int chk_val = 1;
-
-using std::string;
-using std::cout;
-using std::endl;
-using std::map;
-using std::vector;
-using std::pair;

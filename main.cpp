@@ -14,11 +14,7 @@ int main(int argc, char *argv[])
 	char *dev = argv[1];
 	char errbuf[PCAP_ERRBUF_SIZE];
 	pcap_t *handle = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
-	if (handle == nullptr)
-	{
-		fprintf(stderr, "couldn't open device %s(%s)\n", dev, errbuf);
-		return -1;
-	}
+	
 	
 	cout << "Gathering Info ..." << endl;
 
@@ -29,6 +25,7 @@ int main(int argc, char *argv[])
 	Mac tmp = Mac::nullMac();
 	pair<Ip,Ip> tmp_flow;
 	Sem_init(&sem, 0);
+	Sem_init(&pp, 0);
 
 	int cnt = 0;
 	for(int i=2;i<argc;i++)	//ip starts at index 2
@@ -81,7 +78,7 @@ int main(int argc, char *argv[])
 	{
 		Spoof_arg sarg1;
 		Spoof_arg sarg2;
-		sarg1 = {handle,arp_table[flow[i].first],flow[i].first,flow[i].second,a_mac,P};
+		sarg1 = {handle,&arp_table,arp_table[flow[i].first],arp_table[flow[i].second],flow[i].first,flow[i].second,a_mac,P};
 		sarg2 = sarg1;
 		sarg2.status = NP;
 		Pthread_create(periodic+i,NULL,(void*(*)(void*))arp_infection,(void*)(&sarg1));
@@ -89,16 +86,12 @@ int main(int argc, char *argv[])
 		Pthread_create(non_periodic+i,NULL,(void*(*)(void*))arp_infection,(void*)(&sarg2));
 		Sem_wait(&sem);
 	}
-	
-	//relay thread
-	pthread_t relay;
 
 	for(int i=0;i<size;i++)
 	{
 		Pthread_join(periodic[i],NULL);
 		Pthread_join(non_periodic[i],NULL);
 	}
-	//Pthread_join(relay,NULL);
 
 	//After every jobs are done -> Recover
 	cout << "Recovering in progress ..." << endl;
@@ -109,12 +102,11 @@ int main(int argc, char *argv[])
 		init_arp(p,arp_table[flow[i].first],a_mac,
 		arp_table[flow[i].second],flow[i].second,
 		arp_table[flow[i].first],flow[i].first,ArpHdr::Reply);
-		Relay_arg rarg = {handle,p};
+		Recover_arg rarg = {handle,p};
 		Pthread_create(recover_t+i,NULL,(void*(*)(void*))recover,(void*)(&rarg));
 		Sem_wait(&sem);
 	}
 	for(int i=0;i<size;i++) Pthread_join(recover_t[i],NULL);
-
 
 	puts("Finished!!");
 	free(periodic);
