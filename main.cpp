@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
 	Mac tmp = Mac::nullMac();
 	pair<Ip,Ip> tmp_flow;
 	Sem_init(&sem, 0);
-	Sem_init(&pp, 0);
+	Sem_init(&s, 0);
 
 	int cnt = 0;
 	for(int i=2;i<argc;i++)	//ip starts at index 2
