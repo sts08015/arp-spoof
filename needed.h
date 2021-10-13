@@ -24,7 +24,7 @@
 #define IP_HDR_LEN 20
 #define MAC_LEN 17
 #define IP_LEN 15
-#define PERIOD 3
+#define PERIOD 15
 
 using std::string;
 using std::cout;
@@ -75,6 +75,7 @@ typedef struct _sarg
     Ip s_ip;
     Ip t_ip;
     Mac a_mac;
+    Ip a_ip;
     STATUS status;
 }Spoof_arg;
 #pragma pack(pop)
@@ -89,4 +90,4 @@ pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
 sem_t sem;
 sem_t s;
-int chk_val = 1;
+volatile int chk_val = 1;
