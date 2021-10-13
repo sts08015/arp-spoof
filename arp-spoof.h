@@ -113,7 +113,7 @@ void arp_infection(void* arg)
                 }
             }
             
-            else if(arp.eth_.type() == EthHdr::Ip4)  //relay
+            else if(arp.eth_.type() == EthHdr::Ip4 && !arp.eth_.dmac().isBroadcast())  //relay
             {
                 map<Ip,Mac> table = *(sarg.table);
                 Ip sip = ip.ip_.sip();
