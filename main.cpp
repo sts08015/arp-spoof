@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
 	{
 		Spoof_arg sarg1;
 		Spoof_arg sarg2;
-		sarg1 = {handle,&arp_table,arp_table[flow[i].first],arp_table[flow[i].second],flow[i].first,flow[i].second,a_mac,P};
+		sarg1 = {handle,&arp_table,arp_table[flow[i].first],arp_table[flow[i].second],flow[i].first,flow[i].second,a_mac,a_ip,P};
 		sarg2 = sarg1;
 		sarg2.status = NP;
 		Pthread_create(periodic+i,NULL,(void*(*)(void*))arp_infection,(void*)(&sarg1));
